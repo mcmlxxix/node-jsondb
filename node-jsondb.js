@@ -62,37 +62,41 @@ JSONdb.prototype.save = function(fileName) {
 }
 
 /* database subscriptions */
-JSONdb.prototype.subscribe = function(query) {
+JSONdb.prototype.subscribe = function(query, callback) {
 }
-JSONdb.prototype.unsubscribe = function(query) {
+JSONdb.prototype.unsubscribe = function(query, callback) {
 }
 
 /* record locking */
-JSONdb.prototype.lock = function(query) {
+JSONdb.prototype.lock = function(query, callback) {
 }
-JSONdb.prototype.unlock = function(query) {
+JSONdb.prototype.unlock = function(query, callback) {
 }
 
 /* database queries */
-JSONdb.prototype.read = function(query) {
+JSONdb.prototype.read = function(query, callback) {
 	var records = [];
 	for(var i=0;i<query.length;i++) {
 		records = records.concat(jp.select(this.data,query[i]));
 	}
+	if(typeof callback == "function")
+		return callback(records);
 	return records;
 }
-JSONdb.prototype.write = function(query) {
+JSONdb.prototype.write = function(query, callback) {
 	var results = [];
 	for(var i=0;i<query.length;i++) {
 		results = results.concat(jp.update(this.data,query[i]));
 	}
+	if(typeof callback == "function")
+		return callback(results);
 	return results;
 }
 
 /* record properties */
-JSONdb.prototype.isSubscribed = function(query) {
+JSONdb.prototype.isSubscribed = function(query, callback) {
 }
-JSONdb.prototype.isLocked = function(query) {
+JSONdb.prototype.isLocked = function(query, callback) {
 }
 
 /* private functions */
