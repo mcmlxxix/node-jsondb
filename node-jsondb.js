@@ -1,3 +1,43 @@
+/**
+	DATABASE PACKET STRUCTURE
+		query={
+			id: <request id>,
+			db: <database name>,
+			oper: <db operation>,
+			data: <see below>
+		};
+	
+	READ QUERY
+		data = [
+			{ path:"path/to/data" },
+			...
+		];
+	
+	WRITE QUERY
+		data = [
+			{ path:"path/to/data", key:"child_property", value:"value_to_be_written" },
+			...
+		];
+	
+	LOCK QUERY
+		data = [
+			{ path:	"path/to/data", lock: <lock type> },
+			...
+		];
+		
+	SUBSCRIPTION QUERY
+		data = [
+			{ path:	"path/to/data" },
+			...
+		];
+		
+	LOCK TYPES
+		read = "r"
+		write = "w"
+		append = "a"
+
+**/
+
 var fs = require('fs');
 var jp = require('node-jpath');
 
@@ -28,25 +68,31 @@ JSONdb.prototype.unsubscribe = function(query) {
 }
 
 /* record locking */
-JSONdb.prototype.lock = function(query,lock) {
+JSONdb.prototype.lock = function(query) {
 }
 JSONdb.prototype.unlock = function(query) {
 }
 
 /* database queries */
-JSONdb.prototype.read = function(query,lock) {
-	var records = jp.select(this.data,query);
+JSONdb.prototype.read = function(query) {
+	var records = [];
+	for(var i=0;i<query.length;i++) {
+		records = records.concat(jp.select(this.data,query[i]));
+	}
 	return records;
 }
-JSONdb.prototype.write = function(query,lock) {
-	var result = jp.update(this.data,query);
-	return result;
+JSONdb.prototype.write = function(query) {
+	var results = [];
+	for(var i=0;i<query.length;i++) {
+		results = results.concat(jp.update(this.data,query[i]));
+	}
+	return results;
 }
 
 /* record properties */
 JSONdb.prototype.isSubscribed = function(query) {
 }
-JSONdb.prototype.isLocked = function(query,lock) {
+JSONdb.prototype.isLocked = function(query) {
 }
 
 /* private functions */
