@@ -1,6 +1,5 @@
 var fs = require('fs');
 var jp = require('node-jpath');
-log(JSON.stringify(jp));
 
 /* database object definition */
 function JSONdb(name) {
