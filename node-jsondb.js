@@ -41,12 +41,16 @@
 var fs = require('fs');
 var jp = require('node-jpath');
 
+const rxTokens = /([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g;
+const delimiter = "/";
+
 /* database object definition */
 function JSONdb(name) {
 	this.name = name;
 	this.users = {};
 	this.data = {};
 	this.metadata = {};
+	this.counter = 0;
 
 	log(this.name + ' db created');
 }
@@ -62,44 +66,96 @@ JSONdb.prototype.save = function(fileName) {
 }
 
 /* database subscriptions */
-JSONdb.prototype.subscribe = function(query, callback) {
+JSONdb.prototype.subscribe = function(request,callback) {
+	return handleRequest.call(this,request,subscribe,callback);
 }
-JSONdb.prototype.unsubscribe = function(query, callback) {
+JSONdb.prototype.unsubscribe = function(request,callback) {
+	return handleRequest.call(this,request,unsubscribe,callback);
 }
 
 /* record locking */
-JSONdb.prototype.lock = function(query, callback) {
+JSONdb.prototype.lock = function(request,callback) {
+	return handleRequest.call(this,request,lock,callback);
 }
-JSONdb.prototype.unlock = function(query, callback) {
+JSONdb.prototype.unlock = function(request,callback) {
+	return handleRequest.call(this,request,unlock,callback);
 }
 
 /* database queries */
-JSONdb.prototype.read = function(query, callback) {
-	var records = [];
-	for(var i=0;i<query.length;i++) {
-		records = records.concat(jp.select(this.data,query[i]));
-	}
-	if(typeof callback == "function")
-		return callback(records);
-	return records;
+JSONdb.prototype.read = function(request,callback) {
+	return handleRequest.call(this,request,read,callback);
 }
-JSONdb.prototype.write = function(query, callback) {
-	var results = [];
-	for(var i=0;i<query.length;i++) {
-		results = results.concat(jp.update(this.data,query[i]));
-	}
-	if(typeof callback == "function")
-		return callback(results);
-	return results;
+JSONdb.prototype.write = function(request,callback) {
+	return handleRequest.call(this,request,write,callback);
 }
 
 /* record properties */
-JSONdb.prototype.isSubscribed = function(query, callback) {
+JSONdb.prototype.isSubscribed = function(request,callback) {
+	return handleRequest.call(this,request,isSubscribed,callback);
 }
-JSONdb.prototype.isLocked = function(query, callback) {
+JSONdb.prototype.isLocked = function(request,callback) {
+	return handleRequest.call(this,request,isLocked,callback);
 }
 
 /* private functions */
+function handleRequest(request,func,callback) {
+	if(request.id == null)
+		request.id = "L" + this.counter++;
+	var response = [];
+	for(var i=0;i<request.data.length;i++) {
+		response = response.concat(func.call(this,request.data[i],request.id));
+	}
+	if(typeof callback == "function")
+		callback(request,response);
+	return response;
+}
+function read(query,clientID) {
+	return jp.select(this.data,query);
+}
+function write(query,clientID) {
+	return jp.update(this.data,query);
+}
+function lock(query,clientID) {
+	var path = query.path.match(rxTokens)[0].join(delimiter);
+	var lock = getLock.call(this,query);
+	if(lock == null) {
+		this.metadata[query.path] = query.lock;
+	}
+	else {
+		
+	}
+	query.lock = lock;
+	return query;
+}
+function unlock(query,clientID) {
+	
+}
+function subscribe(query,clientID) {
+	
+}
+function unsubscribe(query,clientID) {
+	
+}
+function isSubscribed(query,clientID) {
+	
+}
+function isLocked(query,clientID) {
+	query.lock = getLock.call(this,query);
+	return query;
+	//result = result.concat(jp.update(this.metadata,query[i]));
+}
+function getPath(path) {
+	return path.match(/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g)[0].join("/");
+}
+function getLock(path) {
+	for(var j in this.metadata) {
+		/* if a child or parent of this query path is locked */
+		if(j.match(path) || path.match(j)) {
+			return this.metadata[j];
+		}
+	}
+	return null;
+}
 function log(str) {
 	console.log('jsondb: ' + str);
 }
