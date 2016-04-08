@@ -116,7 +116,7 @@ function write(query,clientID) {
 	return jp.update(this.data,query);
 }
 function lock(query,clientID) {
-	var path = query.path.match(rxTokens)[0].join(delimiter);
+	var path = getPath(query.path);
 	var lock = getLock.call(this,query);
 	if(lock == null) {
 		this.metadata[query.path] = query.lock;
@@ -140,12 +140,13 @@ function isSubscribed(query,clientID) {
 	
 }
 function isLocked(query,clientID) {
-	query.lock = getLock.call(this,query);
+	var path = getPath(query.path);
+	query.lock = getLock.call(this,path);
 	return query;
 	//result = result.concat(jp.update(this.metadata,query[i]));
 }
 function getPath(path) {
-	return path.match(/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g)[0].join("/");
+	return path.match(/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g).join("/");
 }
 function getLock(path) {
 	for(var j in this.metadata) {
