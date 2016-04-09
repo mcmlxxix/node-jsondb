@@ -108,16 +108,37 @@ function handleRequest(request,func,callback) {
 		callback(response);
 	return response;
 }
+function sendUpdates(query,clientID,metadata) {
+	for(var i=0;i<metadata.length;i++) {
+		for(var s in metadata[i].subscribe) {
+			if(i == clientID)
+				continue;
+			var callback = metadata[i].subscribe[s];
+			if(typeof callback == "function") {
+				callback(jp.select(this.data,query));
+			}
+		}
+	}
+}
 function read(query,clientID) {
-	return jp.select(this.data,query);
+	query.lock = "r";
+	lock.call(this,query,clientID);
+	var result = jp.select(this.data,query);
+	unlock.call(this,query,clientID);
+	return result;
 }
 function write(query,clientID) {
-	return jp.update(this.data,query);
+	query.lock = "w";
+	lock.call(this,query,clientID);
+	var result = jp.update(this.data,query);
+	unlock.call(this,query,clientID);
+	return result;
 }
 function lock(query,clientID) {
 	var path = getPath(query.path);
 	var data = getMetadata.call(this,query);
 	if(data.length == 0) {
+		//log("locking: " + path);
 		this.metadata[query.path] = newMetadata();
 		this.metadata[query.path].lock[clientID] = query.lock;
 		data.push(this.metadata[query.path]);
@@ -127,24 +148,20 @@ function lock(query,clientID) {
 			
 		}
 	}
-	query.data = data;
+	//query.data = data;
 	return query;
 }
 function unlock(query,clientID) {
 	var path = getPath(query.path);
 	if(this.metadata[path] != null) {
-		delete this.metadata[path].lock[clientID];
-		var data = getMetadata(path);
-		for(var i=0;i<data.length;i++) {
-			for(var s in data[i].subscribe) {
-				var callback = data[i].subscribe[s];
-				if(typeof callback == "function") {
-					callback(query);
-				}
-			}
+		//log("unlocking: " + path);
+		if(this.metadata[path].lock[clientID] == "w") {
+			var metadata = getMetadata.call(this,path);
+			sendUpdates.call(this,query,clientID,metadata);
 		}
+		delete this.metadata[path].lock[clientID];
 	}
-	query.data = this.metadata[path];
+	//query.data = this.metadata[path];
 	return query;
 }
 function subscribe(query,clientID,callback) {
