@@ -56,7 +56,7 @@ const RECORD = 				"record";
 const TRANS = 				"transaction";
 const FULL = 				"full";
 
-/* error types */ 
+/* error types */
 const ERROR_NONE =			0;
 const ERROR_INVALID_PATH = 	1;
 const ERROR_LOCK_WRITE = 	2;
