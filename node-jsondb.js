@@ -44,7 +44,8 @@ var util = require('util');
 var jp = require('node-jpath');
 
 /* global constants */
-const ROOTPATH = 			"/";
+const rxPath =				/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g;
+const DELIMITER = 			"/";
 
 /* lock types */
 const READ = 				"r";
@@ -259,7 +260,7 @@ function lockRecord(request,query) {
 		/* convert path to / delimited string */
 		var path = getPath(result[i].path);
 		/* find any existing metadata which may match this path */
-		var metadata = getMetadata.call(this,query);
+		var metadata = getMetadata.call(this,path);
 		/* find locks in metadata */
 		if(isLocked(metadata)) {
 			result[i].status = ERROR_LOCK;
@@ -282,14 +283,14 @@ function unlockRecord(request,query) {
 	return result;
 }
 function lockAll(request,query) {
-	if(this.metadata[ROOTPATH] == null || !(this.metadata[ROOTPATH].hasOwnProperty('lock')))
-	this.metadata[ROOTPATH] = newMetaData();
-	this.metadata[ROOTPATH].lock[request.clientID] = request.lock;
+	if(this.metadata[DELIMITER] == null || !(this.metadata[DELIMITER].hasOwnProperty('lock')))
+	this.metadata[DELIMITER] = newMetaData();
+	this.metadata[DELIMITER].lock[request.clientID] = request.lock;
 	return null;
 }
 function unlockAll(request,query) {
-	if(this.metadata[ROOTPATH] != null && this.metadata[ROOTPATH].hasOwnProperty('lock')) 
-		delete this.metadata[ROOTPATH].lock[request.clientID];	
+	if(this.metadata[DELIMITER] != null && this.metadata[DELIMITER].hasOwnProperty('lock')) 
+		delete this.metadata[DELIMITER].lock[request.clientID];	
 	var path = getPath(query.path);
 	var metadata = getMetadata.call(this,path);
 	sendUpdates.call(this,query,request.clientID,metadata);
@@ -319,7 +320,7 @@ function unsubscribe(request,query) {
 	return query;
 }
 function setLock(request,path) {
-	log("locking: " + path);
+	//log("locking: " + path);
 	if(this.metadata[path] == null)
 		this.metadata[path] = newMetadata();
 	this.metadata[path].lock[request.clientID] = request.lock;
@@ -328,7 +329,7 @@ function remLock(request,path,response) {
 	/* if there is no existing lock for this path, skip this result */
 	if(this.metadata[path] == null)
 		return;
-	log("unlocking: " + path);
+	//log("unlocking: " + path);
 	/* if this was a write lock */
 	if(/w/i.test(this.metadata[path].lock[request.clientID])) {
 		/* find any existing metadata which may match this path */
@@ -340,7 +341,12 @@ function remLock(request,path,response) {
 	delete this.metadata[path].lock[request.clientID];
 }
 function getPath(path) {
-	return path.match(/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g).join("/");
+	if(rxPath.test(path))
+		return path.match(/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g).join(DELIMITER);
+	else if(path == "" || path == null || /[*\/]/.test(path))
+		return DELIMITER;
+	else
+		return path;
 }
 function isLocked(metadata) {
 	for(var m in metadata) {
