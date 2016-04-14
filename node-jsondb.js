@@ -1,4 +1,5 @@
-/**
+/**	node.js json shared-object database - mcmlxxix - 2016
+
 	DATABASE PACKET STRUCTURE
 		request={
 			id: <client id>,
@@ -21,7 +22,7 @@
 	
 	LOCK QUERY
 		data = [
-			{ path:	"path/to/data", lock: <lock type> },
+			{ path:	"path/to/data", lock: <see lock types> },
 			...
 		];
 		
@@ -39,28 +40,30 @@
 **/
 
 var fs = require('fs');
+var util = require('util');
 var jp = require('node-jpath');
 
 /* global constants */
-const ROOTPATH = "/";
+const ROOTPATH = 			"/";
 
 /* lock types */
-const READ = "r";
-const WRITE = "w";
+const READ = 				"r";
+const WRITE = 				"w";
 
 /* lock-level options */
-const NONE = null;
-const RECORD = "record";
-const TRANS = "transaction";
-const FULL = "full";
+const NONE = 				null;
+const RECORD = 				"record";
+const TRANS = 				"transaction";
+const FULL = 				"full";
 
 /* error types */
-const ERROR_INVALID_PATH = "invalid path: %s";
-const ERROR_LOCK_WRITE = "unable to lock record for writing: %s";
-const ERROR_LOCK = "unable to lock record: %s";
-const ERROR_UNLOCK = "unable to unlock record: %s";
-const ERROR_WRITE = "unable to write record: %s";
-const ERROR_READ = "unable to read record: %s";
+const ERROR_NONE =			0;
+const ERROR_INVALID_PATH = 	1;
+const ERROR_LOCK_WRITE = 	2;
+const ERROR_LOCK = 			3;
+const ERROR_UNLOCK = 		4;
+const ERROR_WRITE = 		5;
+const ERROR_READ = 			6;
 
 /* database object definition */
 function JSONdb(name) {
@@ -103,11 +106,6 @@ function Settings(locking,maxConnections) {
 		if(value >=0 && value < 999999)
 			maxConnections = value;
 	});
-}
-
-/* database errors */
-function Errors(eNum) {
-	
 }
 
 /* data methods */
@@ -174,7 +172,7 @@ function handleRequest(request,func,callback) {
 		request.time = process.hrtime().toString();
 	var response = [];
 	for(var i=0;i<request.data.length;i++) {
-		var result = func.call(this,request.data[i],request.id,callback);
+		var result = func.call(this,request,request.data[i],callback);
 		if(result == null) {
 			/* failed request? */
 		}
@@ -198,7 +196,7 @@ function sendUpdates(response,clientID,metadata) {
 		}
 	}
 }
-function read(query,clientID) {
+function read(request,query) {
 	var result = jp.select(this.data,query);
 	if(this.settings.locking == RECORD) {
 		for(var i=0;i<result.length;i++) {
@@ -207,15 +205,23 @@ function read(query,clientID) {
 			/* find any existing metadata which may match this path */
 			var metadata = getMetadata.call(this,query);
 			/* find locks in metadata */
-			if(canRead(metadata,clientID) == false) {
-				log("read error: " + path);
-				result.splice(i--,1);
+			if(canRead(request,metadata) == false) {
+				result[i].status = ERROR_READ;
+				result[i].value = null;
 			}
+			else {
+				result[i].status = ERROR_NONE;
+			}
+		}
+	}
+	else if(this.settings.locking == NONE) {
+		for(var i=0;i<result.length;i++) {
+			result[i].status = ERROR_NONE;
 		}
 	}
 	return result;
 }
-function write(query,clientID) {
+function write(request,query) {
 	jp.settings.create = true;
 	var result = jp.select(this.data,query);
 	jp.settings.create = false;
@@ -227,22 +233,27 @@ function write(query,clientID) {
 			/* find any existing metadata which may match this path */
 			var metadata = getMetadata.call(this,query);
 			/* find locks in metadata */
-			if(canWrite(metadata,clientID) == false) {
-				log("write error: " + path);
-				result.splice(i--,1);
+			if(canWrite(request,metadata) == false) {
+				query.status = ERROR_WRITE;
+				result[i].value = null;
 			}
 			else {
+				query.status = ERROR_NONE;
 				result[i].value[query.key] = query.value;
 			}
 		}
 	}
 	/* special scenario where if we arent doing any record locking, distribute updates immediately */
 	else if(this.settings.locking == NONE) {
-		unlockAll.call(this,query,clientID);
+		for(var i=0;i<result.length;i++) {
+			query.status = ERROR_NONE;
+			result[i].value[query.key] = query.value;
+		}
+		unlockAll.call(this,request,query);
 	}
 	return query;
 }
-function lockRecord(query,clientID) {
+function lockRecord(request,query) {
 	var result = jp.select(this.data,query);
 	for(var i=0;i<result.length;i++) {
 		/* convert path to / delimited string */
@@ -251,81 +262,82 @@ function lockRecord(query,clientID) {
 		var metadata = getMetadata.call(this,query);
 		/* find locks in metadata */
 		if(isLocked(metadata)) {
-			log("lock error: " + path);
+			result[i].status = ERROR_LOCK;
 		}
 		/* if there is no lock data that matches this path, set the specified lock */
 		else {
-			setLock.call(this,path,query.lock,clientID);
+			result[i].status = ERROR_NONE;
+			setLock.call(this,request,path);
 		}
 	}
 	return result;
 }
-function unlockRecord(query,clientID) {
+function unlockRecord(request,query) {
 	var result = jp.select(this.data,query);
 	for(var i=0;i<result.length;i++) {
-		remLock.call(this,result[i],clientID);
+		var path = getPath(result[i].path);
+		result[i].status = ERROR_NONE;
+		remLock.call(this,request,path,result[i]);
 	}
 	return result;
 }
-function lockAll(query,clientID) {
+function lockAll(request,query) {
 	if(this.metadata[ROOTPATH] == null || !(this.metadata[ROOTPATH].hasOwnProperty('lock')))
 	this.metadata[ROOTPATH] = newMetaData();
-	this.metadata[ROOTPATH].lock[clientID] = query.lock;
+	this.metadata[ROOTPATH].lock[request.clientID] = request.lock;
 	return null;
 }
-function unlockAll(query,clientID) {
+function unlockAll(request,query) {
 	if(this.metadata[ROOTPATH] != null && this.metadata[ROOTPATH].hasOwnProperty('lock')) 
-		delete this.metadata[ROOTPATH].lock[clientID];	
+		delete this.metadata[ROOTPATH].lock[request.clientID];	
 	var path = getPath(query.path);
 	var metadata = getMetadata.call(this,path);
-	sendUpdates.call(this,query,clientID,metadata);
+	sendUpdates.call(this,query,request.clientID,metadata);
 	return null;
 }
-function lockTransaction(query,clientID) {
+function lockTransaction(request,query) {
 	return null;
 }
-function unlockTransaction(query,clientID) {
+function unlockTransaction(request,query) {
 	return null;
 }
-function subscribe(query,clientID,callback) {
+function subscribe(request,query,callback) {
 	var path = getPath(query.path);
 	if(this.metadata[path] == null) {
 		this.metadata[path] = newMetadata();
 	}
-	this.metadata[path].subscribe[clientID] = callback;
+	this.metadata[path].subscribe[request.clientID] = callback;
 	query.data = this.metadata[path];
 	return query;
 }
-function unsubscribe(query,clientID) {
+function unsubscribe(request,query) {
 	var path = getPath(query.path);
 	if(this.metadata[path] != null) {
-		delete this.metadata[path].subscribe[clientID];
+		delete this.metadata[path].subscribe[request.clientID];
 	}
 	query.data = this.metadata[path];
 	return query;
 }
-function setLock(path,locktype,clientID) {
+function setLock(request,path) {
 	log("locking: " + path);
 	if(this.metadata[path] == null)
 		this.metadata[path] = newMetadata();
-	this.metadata[path].lock[clientID] = locktype;
+	this.metadata[path].lock[request.clientID] = request.lock;
 }
-function remLock(response,clientID) {
-	/* convert path to / delimited string */
-	var path = getPath(response.path);
+function remLock(request,path,response) {
 	/* if there is no existing lock for this path, skip this result */
 	if(this.metadata[path] == null)
 		return;
 	log("unlocking: " + path);
 	/* if this was a write lock */
-	if(this.metadata[path].lock[clientID] == "w") {
+	if(this.metadata[path].lock[request.clientID] == "w") {
 		/* find any existing metadata which may match this path */
 		var metadata = getMetadata.call(this,path);
 		if(metadata.length > 0) {
-			sendUpdates.call(this,response,clientID,metadata);
+			sendUpdates.call(this,response,request.clientID,metadata);
 		}
 	}
-	delete this.metadata[path].lock[clientID];
+	delete this.metadata[path].lock[request.clientID];
 }
 function getPath(path) {
 	return path.match(/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g).join("/");
@@ -340,11 +352,11 @@ function isLocked(metadata) {
 	}
 	return false;
 }
-function canWrite(metadata,clientID) {
+function canWrite(request,metadata) {
 	for(var m in metadata) {
 		if(metadata[m].lock == null)
 			continue;
-		if(metadata[m].lock[clientID] == 'w')
+		if(metadata[m].lock[request.clientID] == 'w')
 			return true;
 		for(var l in metadata[m].lock) {
 			if(metadata[m].lock[l] != null) {
@@ -352,15 +364,15 @@ function canWrite(metadata,clientID) {
 			}
 		}
 	}
-	return true;
+	return false;
 }
-function canRead(metadata,clientID) {
+function canRead(request,metadata) {
 	var count = 0;
 	for(var m in metadata) {
 		count++;
 		if(metadata[m].lock == null)
 			continue;
-		if(metadata[m].lock[clientID] == 'w' || metadata[m].lock[clientID] == 'r')
+		if(metadata[m].lock[request.clientID] == 'w' || metadata[m].lock[request.clientID] == 'r')
 			return true;
 		for(var l in metadata[m].lock) {
 			if(metadata[m].lock[l] == 'w') {
@@ -385,6 +397,9 @@ function newMetadata() {
 		lock:{},
 		subscribe:{}
 	};
+}
+function error(e,str) {
+	return util.format(e,str);
 }
 function log(str) {
 	console.log('jsondb: ' + str);
