@@ -56,7 +56,7 @@ const RECORD = 				"record";
 const TRANS = 				"transaction";
 const FULL = 				"full";
 
-/* error types */
+/* error types */ 
 const ERROR_NONE =			0;
 const ERROR_INVALID_PATH = 	1;
 const ERROR_LOCK_WRITE = 	2;
@@ -330,7 +330,7 @@ function remLock(request,path,response) {
 		return;
 	log("unlocking: " + path);
 	/* if this was a write lock */
-	if(this.metadata[path].lock[request.clientID] == "w") {
+	if(/w/i.test(this.metadata[path].lock[request.clientID])) {
 		/* find any existing metadata which may match this path */
 		var metadata = getMetadata.call(this,path);
 		if(metadata.length > 0) {
@@ -356,7 +356,7 @@ function canWrite(request,metadata) {
 	for(var m in metadata) {
 		if(metadata[m].lock == null)
 			continue;
-		if(metadata[m].lock[request.clientID] == 'w')
+		if(/w/i.test(metadata[m].lock[request.clientID]))
 			return true;
 		for(var l in metadata[m].lock) {
 			if(metadata[m].lock[l] != null) {
@@ -372,10 +372,10 @@ function canRead(request,metadata) {
 		count++;
 		if(metadata[m].lock == null)
 			continue;
-		if(metadata[m].lock[request.clientID] == 'w' || metadata[m].lock[request.clientID] == 'r')
+		if(/[rw]/i.test(metadata[m].lock[request.clientID]))
 			return true;
 		for(var l in metadata[m].lock) {
-			if(metadata[m].lock[l] == 'w') {
+			if(/w/i.test(metadata[m].lock[l])) {
 				return false;
 			}
 		}
