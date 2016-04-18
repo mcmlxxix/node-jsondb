@@ -8,25 +8,25 @@
 			data: <see below>
 		};
 	
-	READ QUERY
+	oper = READ
 		data = [
 			{ path:"path/to/data" },
 			...
 		];
 	
-	WRITE QUERY
+	oper = WRITE
 		data = [
 			{ path:"path/to/data", key:"child_property", value:"value_to_be_written" },
 			...
 		];
 	
-	LOCK QUERY
+	oper = UN/LOCK
 		data = [
 			{ path:	"path/to/data", lock: <see lock types> },
 			...
 		];
 		
-	SUBSCRIPTION QUERY
+	oper = UN/SUBSCRIBE
 		data = [
 			{ path:	"path/to/data" },
 			...
@@ -35,41 +35,25 @@
 	LOCK TYPES
 		read = "r"
 		write = "w"
-		append = "a"
+		append = "a"	
 
 **/
 
 var fs = require('fs');
 var util = require('util');
 var jp = require('node-jpath');
+var oper = require('./lib/constant').oper;
+var err = require('./lib/constant').error;
+var lock = require('./lib/constant').lock;
 
 /* global constants */
-const rxPath =				/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g;
+const RXPATH =				/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g;
 const DELIMITER = 			"/";
-
-/* lock types */
-const READ = 				"r";
-const WRITE = 				"w";
-
-/* lock-level options */
-const NONE = 				null;
-const RECORD = 				"record";
-const TRANS = 				"transaction";
-const FULL = 				"full";
-
-/* error types */ 
-const ERROR_NONE =			0;
-const ERROR_INVALID_PATH = 	1;
-const ERROR_LOCK_WRITE = 	2;
-const ERROR_LOCK = 			3;
-const ERROR_UNLOCK = 		4;
-const ERROR_WRITE = 		5;
-const ERROR_READ = 			6;
 
 /* database object definition */
 function JSONdb(name) {
 	this.name = name;
-	this.settings = new Settings(/* Defaults=locking:NONE, maxConnections:0 */);
+	this.settings = new Settings(/* Defaults=locking:lock.NONE, maxConnections:0 */);
 
 	this.clients = {};
 	this.data = {};
@@ -83,29 +67,29 @@ function JSONdb(name) {
 
 /* database settings */
 function Settings(locking,maxConnections) {
-	var maxConnections = 0;
-	var locking = NONE;
+	var m = 0;
+	var l = lock.NONE;
+	
 	this.__defineGetter__('locking',function() {
-		return locking;
+		return l;
 	});
 	this.__defineSetter__('locking',function(value) {
 		switch(value.toLowerCase()) {
-		case NONE:
-		case RECORD:
-		case TRANS:
-		case FULL:
-			locking = value.toLowerCase();
+		case lock.NONE:
+		case lock.TRANS:
+		case lock.FULL:
+			l = value.toLowerCase();
 			break;
 		default:
 			break;
 		}
 	});
 	this.__defineGetter__('maxConnections',function() {
-		return maxConnections;
+		return m;
 	});
 	this.__defineSetter__('maxConnections',function(value) {
 		if(value >=0 && value < 999999)
-			maxConnections = value;
+			m = value;
 	});
 }
 
@@ -129,30 +113,24 @@ JSONdb.prototype.unsubscribe = function(request,callback) {
 
 /* record locking */
 JSONdb.prototype.lock = function(request,callback) {
-	if(this.settings.locking == NONE) {
+	if(this.settings.locking == lock.NONE) {
 		/* send error - locks disabled */
 	}
-	else if(this.settings.locking == FULL) {
+	else if(this.settings.locking == lock.FULL) {
 		return handleRequest.call(this,request,lockAll,callback);
 	}
-	else if(this.settings.locking == RECORD) {
-		return handleRequest.call(this,request,lockRecord,callback);
-	}
-	else if(this.settings.locking == TRANS) {
+	else if(this.settings.locking == lock.TRANS) {
 		return handleRequest.call(this,request,lockTransaction,callback);
 	}
 }
 JSONdb.prototype.unlock = function(request,callback) {
-	if(this.settings.locking == NONE) {
+	if(this.settings.locking == lock.NONE) {
 		/* send error - locks disabled */
 	}
-	else if(this.settings.locking == FULL) {
+	else if(this.settings.locking == lock.FULL) {
 		return handleRequest.call(this,request,unlockAll,callback);
 	}
-	else if(this.settings.locking == RECORD) {
-		return handleRequest.call(this,request,unlockRecord,callback);
-	}
-	else if(this.settings.locking == TRANS) {
+	else if(this.settings.locking == lock.TRANS) {
 		return handleRequest.call(this,request,unlockTransaction,callback);
 	}
 }
@@ -171,19 +149,20 @@ function handleRequest(request,func,callback) {
 		request.id = "L" + this.counter++;
 	if(request.time == null)
 		request.time = process.hrtime().toString();
-	var response = [];
+	var data = [];
 	for(var i=0;i<request.data.length;i++) {
 		var result = func.call(this,request,request.data[i],callback);
 		if(result == null) {
 			/* failed request? */
 		}
 		else {
-			response = response.concat(result);
+			data = data.concat(result);
 		}
 	}
+	request.data = data;
 	if(typeof callback == "function")
-		callback(response);
-	return response;
+		callback(request);
+	return request;
 }
 function sendUpdates(response,clientID,metadata) {
 	for(var i in metadata) {
@@ -199,26 +178,31 @@ function sendUpdates(response,clientID,metadata) {
 }
 function read(request,query) {
 	var result = jp.select(this.data,query);
-	if(this.settings.locking == RECORD) {
+	if(this.settings.locking == lock.TRANS) {
+		var status = err.NONE;
 		for(var i=0;i<result.length;i++) {
 			/* convert path to / delimited string */
 			var path = getPath(result[i].path);
 			/* find any existing metadata which may match this path */
-			var metadata = getMetadata.call(this,query);
+			var metadata = getMetadata.call(this,path);
 			/* find locks in metadata */
 			if(canRead(request,metadata) == false) {
-				result[i].status = ERROR_READ;
-				result[i].value = null;
-			}
-			else {
-				result[i].status = ERROR_NONE;
+				status = err.READ;
+				break;
 			}
 		}
+		if(status == err.READ) {
+			for(var i=0;i<result.length;i++) {
+				delete result[i].value;
+			}
+		}
+		request.status = status;
 	}
-	else if(this.settings.locking == NONE) {
-		for(var i=0;i<result.length;i++) {
-			result[i].status = ERROR_NONE;
-		}
+	else if(this.settings.locking == lock.NONE) {
+		// for(var i=0;i<result.length;i++) {
+			// result[i].status = NONE;
+		// }
+		request.status = err.NONE;
 	}
 	return result;
 }
@@ -226,67 +210,76 @@ function write(request,query) {
 	jp.settings.create = true;
 	var result = jp.select(this.data,query);
 	jp.settings.create = false;
-	/* if we are locking individual records */
-	if(this.settings.locking == RECORD) {
+	/* if we are locking transaction records */
+	if(this.settings.locking == lock.TRANS) {
+		var status = err.NONE;
 		for(var i=0;i<result.length;i++) {
 			/* convert path to / delimited string */
 			var path = getPath(result[i].path + "/" + result[i].key);
 			/* find any existing metadata which may match this path */
-			var metadata = getMetadata.call(this,query);
+			var metadata = getMetadata.call(this,path);
 			/* find locks in metadata */
 			if(canWrite(request,metadata) == false) {
-				query.status = ERROR_WRITE;
-				result[i].value = null;
+				status = err.WRITE;
+				break;
+				//result[i].value = null;
 			}
-			else {
-				query.status = ERROR_NONE;
+		}
+		if(status == err.NONE) {
+			for(var i=0;i<result.length;i++) {
 				result[i].value[query.key] = query.value;
 			}
 		}
+		request.status = status;
 	}
-	/* special scenario where if we arent doing any record locking, distribute updates immediately */
-	else if(this.settings.locking == NONE) {
+	/* if we arent doing any record locking, distribute updates immediately */
+	else if(this.settings.locking == lock.NONE) {
 		for(var i=0;i<result.length;i++) {
-			query.status = ERROR_NONE;
 			result[i].value[query.key] = query.value;
 		}
 		unlockAll.call(this,request,query);
+		request.status = err.NONE;
 	}
-	return query;
+	return result;
 }
-function lockRecord(request,query) {
+function lockTransaction(request,query) {
 	var result = jp.select(this.data,query);
+	var status = err.NONE;
 	for(var i=0;i<result.length;i++) {
 		/* convert path to / delimited string */
 		var path = getPath(result[i].path);
 		/* find any existing metadata which may match this path */
 		var metadata = getMetadata.call(this,path);
 		/* find locks in metadata */
-		if(isLocked(metadata)) {
-			result[i].status = ERROR_LOCK;
+		if(canLock(metadata) == false) {
+			status = err.LOCK;
+			break;
 		}
-		/* if there is no lock data that matches this path, set the specified lock */
-		else {
-			result[i].status = ERROR_NONE;
+	}
+	if(status == err.NONE) {
+		for(var i=0;i<result.length;i++) {
+			var path = getPath(result[i].path);
 			setLock.call(this,request,path);
 		}
 	}
+	request.status = status;
 	return result;
 }
-function unlockRecord(request,query) {
+function unlockTransaction(request,query) {
 	var result = jp.select(this.data,query);
 	for(var i=0;i<result.length;i++) {
 		var path = getPath(result[i].path);
-		result[i].status = ERROR_NONE;
 		remLock.call(this,request,path,result[i]);
 	}
+	request.status = err.NONE;
 	return result;
 }
 function lockAll(request,query) {
 	if(this.metadata[DELIMITER] == null || !(this.metadata[DELIMITER].hasOwnProperty('lock')))
 	this.metadata[DELIMITER] = newMetaData();
 	this.metadata[DELIMITER].lock[request.clientID] = request.lock;
-	return null;
+	request.status = err.NONE;
+	return query;
 }
 function unlockAll(request,query) {
 	if(this.metadata[DELIMITER] != null && this.metadata[DELIMITER].hasOwnProperty('lock')) 
@@ -294,13 +287,8 @@ function unlockAll(request,query) {
 	var path = getPath(query.path);
 	var metadata = getMetadata.call(this,path);
 	sendUpdates.call(this,query,request.clientID,metadata);
-	return null;
-}
-function lockTransaction(request,query) {
-	return null;
-}
-function unlockTransaction(request,query) {
-	return null;
+	request.status = err.NONE;
+	return query;
 }
 function subscribe(request,query,callback) {
 	var path = getPath(query.path);
@@ -309,6 +297,7 @@ function subscribe(request,query,callback) {
 	}
 	this.metadata[path].subscribe[request.clientID] = callback;
 	query.data = this.metadata[path];
+	request.status = err.NONE;
 	return query;
 }
 function unsubscribe(request,query) {
@@ -317,10 +306,10 @@ function unsubscribe(request,query) {
 		delete this.metadata[path].subscribe[request.clientID];
 	}
 	query.data = this.metadata[path];
+	request.status = err.NONE;
 	return query;
 }
 function setLock(request,path) {
-	//log("locking: " + path);
 	if(this.metadata[path] == null)
 		this.metadata[path] = newMetadata();
 	this.metadata[path].lock[request.clientID] = request.lock;
@@ -341,22 +330,24 @@ function remLock(request,path,response) {
 	delete this.metadata[path].lock[request.clientID];
 }
 function getPath(path) {
-	if(rxPath.test(path))
+	if(RXPATH.test(path))
 		return path.match(/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g).join(DELIMITER);
-	else if(path == "" || path == null || /[*\/]/.test(path))
+	else if(path == "" || path == null || /^[*\/]$/.test(path))
 		return DELIMITER;
 	else
 		return path;
 }
-function isLocked(metadata) {
+function canLock(metadata) {
 	for(var m in metadata) {
+		if(metadata[m].lock == null)
+			continue;
 		for(var l in metadata[m].lock) {
 			if(metadata[m].lock[l] != null) {
-				return true;
+				return false;
 			}
 		}
 	}
-	return false;
+	return true;
 }
 function canWrite(request,metadata) {
 	for(var m in metadata) {
@@ -396,6 +387,7 @@ function getMetadata(path) {
 			data[j] = this.metadata[j];
 		}
 	}
+	log(JSON.stringify(data));
 	return data;
 }
 function newMetadata() {
@@ -404,14 +396,11 @@ function newMetadata() {
 		subscribe:{}
 	};
 }
-function error(e,str) {
-	return util.format(e,str);
-}
 function log(str) {
 	console.log('jsondb: ' + str);
 }
 
 /* public methods */
-exports.create = function(namespace) {
+module.exports.create = function(namespace) {
 	return new JSONdb(namespace);
 }
