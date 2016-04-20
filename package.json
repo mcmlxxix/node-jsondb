@@ -1,0 +1,22 @@
+{
+	"name": "node-jsondb",
+	"description": "jsondb: Shared-object database using jPath for object traversal",
+	"version": "1.0",
+	"author": {
+		"name": "Matt Johnson",
+		"email": "mdj1979@gmail.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/mcmlxxix/node-jsondb.git"
+	},
+	"bugs": {
+		"url": "https://github.com/mcmlxxix/node-jsondb/issues"
+	},
+	"licenses": [{
+		"type": "MIT",
+		"url": "https://github.com/mcmlxxix/node-jsondb/LICENSE-MIT"
+	}],
+	"main": "./lib/node-jpath",
+	"keywords": ["utility", "database", "jpath", "json", "objects"]
+}
