@@ -17,6 +17,6 @@
 		"type": "MIT",
 		"url": "https://github.com/mcmlxxix/node-jsondb/LICENSE-MIT"
 	}],
-	"main": "./lib/node-jpath",
+	"main": "./node-jsondb",
 	"keywords": ["utility", "database", "jpath", "json", "objects"]
 }
