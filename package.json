@@ -1,6 +1,6 @@
 {
-  "name": "node-jsondb",
-  "description": "jsondb: Shared-object database using jPath for object traversal",
+  "name": "node-jsdb",
+  "description": "Shared-object database w/jPath, locking, subscriptions",
   "version": "1.0.0",
   "author": {
     "name": "Matt Johnson",
