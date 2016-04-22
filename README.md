@@ -10,6 +10,10 @@ JSON shared object database
 When used in conjunction with [node-jsondb-srv](https://github.com/mcmlxxix/node-jsondb-srv/), it acts as a database server which accepts socket connections via [node-jsondb-client](https://github.com/mcmlxxix/node-jsondb-client/).
 
 ## Installation
+	
+	npm install node-jsdb
+	
+or
 
 	git clone https://github.com/mcmlxxix/node-jsondb.git
 	
