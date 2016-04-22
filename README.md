@@ -13,10 +13,10 @@ When used in conjunction with [node-jsondb-srv](https://github.com/mcmlxxix/node
 
 	git clone https://github.com/mcmlxxix/node-jsondb.git
 	
-	you can also add https://github.com/mcmlxxix/node-jsondb.git as a dependency to your project's package.json file
-	
-	NOTE: 	to use the full socket service, which already has this library as a dependent,
-			see [node-jsondb-srv](https://github.com/mcmlxxix/node-jsondb-srv/) and/or [node-jsondb-client](https://github.com/mcmlxxix/node-jsondb-client/) for installation instructions.
+you can also add https://github.com/mcmlxxix/node-jsondb.git as a dependency to your project's package.json file
+
+NOTE: 	to use the full socket service, which already has this library as a dependent,
+		see [node-jsondb-srv](https://github.com/mcmlxxix/node-jsondb-srv/) and/or [node-jsondb-client](https://github.com/mcmlxxix/node-jsondb-client/) for installation instructions.
 	
 ## Features
 
@@ -30,23 +30,23 @@ When used in conjunction with [node-jsondb-srv](https://github.com/mcmlxxix/node
 	
 ### Transactions:
 
-	with transaction mode enabled for a given database, any changes to the database must be preceded by a "write lock" on the affected records, and any locks or writes that fail during the transaction will cause the transaction to fail entirely, and the data will remain unchanged.
+with transaction mode enabled for a given database, any changes to the database must be preceded by a "write lock" on the affected records, and any locks or writes that fail during the transaction will cause the transaction to fail entirely, and the data will remain unchanged.
 	
 ### Database locks:
 
-	with "full" lock mode enabled, any changes to the database must be preceded by a "write lock," and no changes will be allowed anywhere in the database until it is unlocked.
+with "full" lock mode enabled, any changes to the database must be preceded by a "write lock," and no changes will be allowed anywhere in the database until it is unlocked.
 	
 ### No locks:
 
-	you can also throw caution to the wind, be a wild and crazy guy, and just let any client make any changes they want without locking. This is most useful in chat room databases and other applications where you are more interested in distributing subscription updates than maintaining data integrity.
+you can also throw caution to the wind, be a wild and crazy guy, and just let any client make any changes they want without locking. This is most useful in chat room databases and other applications where you are more interested in distributing subscription updates than maintaining data integrity.
 	
 ### Subscriptions:
 
-	clients may "subscribe" to a particular record location, and those clients will receive a packet containing the latest copy of the data stored at that location (or it will be passed to a callback) any time another client makes a change affecting that record.
+clients may "subscribe" to a particular record location, and those clients will receive a packet containing the latest copy of the data stored at that location (or it will be passed to a callback) any time another client makes a change affecting that record.
 	
 ### Save/Load:
 	
-	databases can be saved to file (in JSON format) and loaded from file (in JSON format)
+databases can be saved to file (in JSON format) and loaded from file (in JSON format)
 	
 ## Packet Structure
 
