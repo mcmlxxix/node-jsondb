@@ -1,7 +1,7 @@
 {
   "name": "node-jsdb",
   "description": "Shared-object database w/jPath, locking, subscriptions",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "Matt Johnson",
     "email": "mdj1979@gmail.com"
