@@ -42,9 +42,9 @@
 var fs = require('fs');
 var util = require('util');
 var jp = require('node-jpath');
-var oper = require('./lib/constant').oper;
-var err = require('./lib/constant').error;
-var lock = require('./lib/constant').lock;
+var oper = require('./lib/defs').oper;
+var err = require('./lib/defs').error;
+var lock = require('./lib/defs').lock;
 
 /* global constants */
 const RXPATH =				/([A-Za-z0-9_\*@\$\(\)]+(?:\[.+?\])?)/g;
